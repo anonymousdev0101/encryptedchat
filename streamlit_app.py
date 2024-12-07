@@ -5,7 +5,7 @@ import base64
 
 # GitHub configuration
 GITHUB_REPO_URL = "https://api.github.com/repos/anonymousdev0101/encryptedchat/contents/messages.txt"
-GITHUB_TOKEN = "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"  # Replace with your new GitHub token
+GITHUB_TOKEN = "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"  # Replace with your new GitHub token
 
 # User credentials
 USER_ACCOUNTS = {
