@@ -1,125 +1,95 @@
 import streamlit as st
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-import base64
+from datetime import datetime
 import requests
-from github import Github
 
-# Function to hash passwords
-def hash_password(password):
-    salt = b"some_random_salt"  # Use a unique salt for each user in production
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=salt,
-        iterations=100000,
-        backend=default_backend()
-    )
-    hashed_password = kdf.derive(password.encode())  # Derive the password hash
-    return base64.b64encode(hashed_password).decode('utf-8')  # Return base64 encoded hash
-
-# Function to verify if entered password matches the stored hash
-def verify_password(stored_hash, password):
-    decoded_hash = base64.b64decode(stored_hash.encode('utf-8'))
-    salt = b"some_random_salt"
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=salt,
-        iterations=100000,
-        backend=default_backend()
-    )
-    try:
-        kdf.verify(decoded_hash, password.encode())
-        return True
-    except Exception:
-        return False
-
-# Dummy user data (hashed password for security)
+# Define a simple user database (for demo purposes)
 USER_ACCOUNTS = {
-    'admin': hash_password('123'),
-    'user': hash_password('123')
+    "admin": "123",
+    "user": "123"
 }
 
-# Function to encrypt the message
-def encrypt_message(message, key="secretkey"):
-    # Simple encryption method using a XOR-based scheme
-    encrypted = ''.join(chr(ord(c) ^ ord(key[i % len(key)])) for i, c in enumerate(message))
-    return encrypted
+# GitHub file for saving chat history
+GITHUB_REPO_URL = "https://api.github.com/repos/anonymousdev0101/Savedata/contents/data.txt"
+GITHUB_TOKEN = "your_github_personal_access_token"  # Replace with your GitHub token
 
-# Function to decrypt the message
-def decrypt_message(encrypted_message, key="secretkey"):
-    decrypted = ''.join(chr(ord(c) ^ ord(key[i % len(key)])) for i, c in enumerate(encrypted_message))
-    return decrypted
-
-# Streamlit Interface
-def main():
-    st.title("Encrypted Chat App")
-    st.write("Welcome! Please log in to access the chat.")
-
-    # Login form
-    with st.form(key='login_form'):
-        username = st.text_input("Username")
-        password = st.text_input("Password", type='password')
-        login_button = st.form_submit_button("Login")
-
-    # If login is successful
-    if login_button:
-        if username in USER_ACCOUNTS and verify_password(USER_ACCOUNTS[username], password):
-            st.success("Login successful!")
-            chat_interface(username)
-        else:
-            st.error("Invalid credentials. Try again.")
-
-# Chat Interface for logged-in users
-def chat_interface(username):
-    st.write(f"Hello, {username}!")
-    
-    # Display old messages
-    display_messages()
-
-    # Input area for new messages
-    message = st.text_input("Type a message")
-
-    if st.button("Send Message"):
-        if message:
-            encrypted_message = encrypt_message(message)
-            save_message_to_github(username, encrypted_message)
-            st.success("Message sent!")
-        else:
-            st.error("Please enter a message.")
-
-# Function to display old messages from GitHub
-def display_messages():
-    # Use GitHub API to fetch messages from a file
+# Helper function to load messages from GitHub
+def load_messages():
     try:
-        g = Github("your_github_token")  # Replace with your GitHub token
-        repo = g.get_user().get_repo('Savedata')  # Replace with your repository
-        file_content = repo.get_contents("messages.txt")
-        messages = file_content.decoded_content.decode("utf-8").splitlines()
-
-        for msg in messages:
-            decrypted_msg = decrypt_message(msg)
-            st.write(decrypted_msg)
+        response = requests.get(GITHUB_REPO_URL, headers={"Authorization": f"token {GITHUB_TOKEN}"})
+        if response.status_code == 200:
+            content = response.json().get("content", "")
+            messages = content.encode("utf-8").decode("base64").splitlines()
+            return messages
+        else:
+            st.error("Failed to load messages.")
+            return []
     except Exception as e:
-        st.error(f"Error retrieving messages: {e}")
+        st.error(f"Error loading messages: {e}")
+        return []
 
-# Function to save the encrypted message to GitHub
-def save_message_to_github(username, encrypted_message):
+# Helper function to save a message to GitHub
+def save_message(message):
     try:
-        g = Github("your_github_token")  # Replace with your GitHub token
-        repo = g.get_user().get_repo('Savedata')  # Replace with your repository
-        file_content = repo.get_contents("messages.txt")
-        existing_messages = file_content.decoded_content.decode("utf-8")
-
-        # Append new encrypted message
-        updated_messages = existing_messages + "\n" + encrypted_message
-
-        # Update the file on GitHub
-        repo.update_file("messages.txt", "Updating messages", updated_messages, file_content.sha)
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        new_message = f"{current_time}: {message}"
+        
+        # Load existing messages
+        existing_messages = load_messages()
+        existing_messages.append(new_message)
+        updated_content = "\n".join(existing_messages).encode("utf-8").encode("base64")
+        
+        # Update file on GitHub
+        sha = requests.get(GITHUB_REPO_URL, headers={"Authorization": f"token {GITHUB_TOKEN}"}).json()["sha"]
+        response = requests.put(
+            GITHUB_REPO_URL,
+            json={
+                "message": "Update chat messages",
+                "content": updated_content,
+                "sha": sha
+            },
+            headers={"Authorization": f"token {GITHUB_TOKEN}"}
+        )
+        if response.status_code == 200:
+            st.success("Message saved successfully.")
+        else:
+            st.error("Failed to save message.")
     except Exception as e:
         st.error(f"Error saving message: {e}")
 
-if __name__ == "__main__":
-    main()
+# Streamlit app
+st.title("Encrypted Chat App")
+
+# Login form
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
+if not st.session_state.logged_in:
+    st.subheader("Login")
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+    if st.button("Login"):
+        if username in USER_ACCOUNTS and USER_ACCOUNTS[username] == password:
+            st.session_state.logged_in = True
+            st.session_state.username = username
+            st.success("Logged in successfully!")
+        else:
+            st.error("Invalid credentials. Try again.")
+else:
+    # Display chat history
+    st.subheader("Chat Room")
+    messages = load_messages()
+    for message in messages:
+        st.write(message)
+    
+    # Message input
+    new_message = st.text_input("Enter your message")
+    if st.button("Send"):
+        if new_message:
+            save_message(f"{st.session_state.username}: {new_message}")
+        else:
+            st.warning("Message cannot be empty.")
+
+    # Logout button
+    if st.button("Logout"):
+        st.session_state.logged_in = False
+        st.success("Logged out successfully.")
