@@ -1,6 +1,7 @@
 import streamlit as st
 from datetime import datetime
 import requests
+import base64
 
 # GitHub configuration
 GITHUB_REPO_URL = "https://api.github.com/repos/anonymousdev0101/encryptedchat/contents/messages.txt"
@@ -15,12 +16,19 @@ USER_ACCOUNTS = {
 # Helper function to load messages from GitHub
 def load_messages():
     try:
-        response = requests.get(GITHUB_REPO_URL, headers={"Authorization": f"token {GITHUB_TOKEN}"})
+        headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+        response = requests.get(GITHUB_REPO_URL, headers=headers)
+        
         if response.status_code == 200:
-            file_content = response.json()["content"]
-            sha = response.json()["sha"]
+            data = response.json()
+            file_content = base64.b64decode(data["content"]).decode("utf-8")  # Decode Base64 content from GitHub
+            sha = data["sha"]
             return file_content.splitlines(), sha
+        elif response.status_code == 404:
+            # If the file doesn't exist yet, return an empty list and no sha
+            return [], None
         else:
+            st.error(f"Failed to load messages. Status code: {response.status_code}")
             return [], None
     except Exception as e:
         st.error(f"Failed to load messages: {e}")
@@ -29,16 +37,19 @@ def load_messages():
 # Helper function to save a message to GitHub
 def save_message(message, sha):
     try:
-        # Add the new message
+        # Load the existing messages
         existing_messages, _ = load_messages()
-        existing_messages.append(message)
+        existing_messages.append(message)  # Add the new message to the list
         updated_content = "\n".join(existing_messages)
 
-        # Save updated content to GitHub
+        # Convert the content to Base64 encoding for GitHub API
+        updated_content_base64 = base64.b64encode(updated_content.encode("utf-8")).decode("utf-8")
+
+        # Prepare data for the GitHub API
         data = {
             "message": "Update chat messages",
-            "content": updated_content,
-            "sha": sha,
+            "content": updated_content_base64,
+            "sha": sha,  # Ensure you're using the correct sha value for the update
         }
         headers = {"Authorization": f"token {GITHUB_TOKEN}"}
         response = requests.put(GITHUB_REPO_URL, json=data, headers=headers)
@@ -46,7 +57,7 @@ def save_message(message, sha):
         if response.status_code == 200:
             return True
         else:
-            st.error("Failed to save message to GitHub.")
+            st.error(f"Failed to save message to GitHub. Status code: {response.status_code}")
             return False
     except Exception as e:
         st.error(f"Error saving message: {e}")
