@@ -3,7 +3,7 @@ from datetime import datetime
 import requests
 
 # GitHub configuration
-GITHUB_REPO_URL = "https://api.github.com/repos/anonymousdev0101/Savedata/contents/messages.txt"
+GITHUB_REPO_URL = "https://api.github.com/repos/anonymousdev0101/encryptedchat/contents/messages.txt"
 GITHUB_TOKEN = "your_github_personal_access_token"  # Replace with your GitHub token
 
 # User credentials
