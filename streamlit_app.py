@@ -4,7 +4,7 @@ import requests
 
 # GitHub configuration
 GITHUB_REPO_URL = "https://api.github.com/repos/anonymousdev0101/encryptedchat/contents/messages.txt"
-GITHUB_TOKEN = "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"  # Replace with your GitHub token
+GITHUB_TOKEN = "your_github_personal_access_token"  # Replace with your GitHub token
 
 # User credentials
 USER_ACCOUNTS = {
@@ -17,42 +17,33 @@ def load_messages():
     try:
         response = requests.get(GITHUB_REPO_URL, headers={"Authorization": f"token {GITHUB_TOKEN}"})
         if response.status_code == 200:
-            content = response.json().get("content", "")
-            messages = content.encode("utf-8").decode("base64").splitlines()
-            return messages
+            file_content = response.json()["content"]
+            sha = response.json()["sha"]
+            return file_content.splitlines(), sha
         else:
-            return []
+            return [], None
     except Exception as e:
         st.error(f"Failed to load messages: {e}")
-        return []
+        return [], None
 
 # Helper function to save a message to GitHub
-def save_message(message):
+def save_message(message, sha):
     try:
-        # Load existing messages
-        response = requests.get(GITHUB_REPO_URL, headers={"Authorization": f"token {GITHUB_TOKEN}"})
-        if response.status_code == 200:
-            existing_content = response.json().get("content", "")
-            sha = response.json()["sha"]
-            existing_messages = existing_content.encode("utf-8").decode("base64").splitlines()
-        else:
-            existing_messages = []
-            sha = None
-
-        # Append the new message
+        # Add the new message
+        existing_messages, _ = load_messages()
         existing_messages.append(message)
-        updated_content = "\n".join(existing_messages).encode("utf-8").encode("base64")
+        updated_content = "\n".join(existing_messages)
 
         # Save updated content to GitHub
         data = {
             "message": "Update chat messages",
             "content": updated_content,
+            "sha": sha,
         }
-        if sha:
-            data["sha"] = sha
-        save_response = requests.put(GITHUB_REPO_URL, json=data, headers={"Authorization": f"token {GITHUB_TOKEN}"})
+        headers = {"Authorization": f"token {GITHUB_TOKEN}"}
+        response = requests.put(GITHUB_REPO_URL, json=data, headers=headers)
 
-        if save_response.status_code == 200:
+        if response.status_code == 200:
             return True
         else:
             st.error("Failed to save message to GitHub.")
@@ -82,11 +73,12 @@ if not st.session_state.logged_in:
 else:
     # Chat room
     st.subheader("Chat Room")
-    messages = load_messages()
+    messages, sha = load_messages()
 
     # Display chat history
-    for message in messages:
-        st.write(message)
+    if messages:
+        for message in messages:
+            st.write(message)
 
     # Input for new messages
     new_message = st.text_input("Enter your message")
@@ -94,7 +86,7 @@ else:
         if new_message:
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             full_message = f"{timestamp} | {st.session_state.username}: {new_message}"
-            if save_message(full_message):
+            if save_message(full_message, sha):
                 st.success("Message sent successfully!")
         else:
             st.warning("Message cannot be empty.")
