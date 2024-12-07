@@ -26,9 +26,10 @@ def load_messages():
             return file_content.splitlines(), sha
         elif response.status_code == 404:
             # If the file doesn't exist yet, return an empty list and no sha
+            st.info("File not found, creating new one.")
             return [], None
         elif response.status_code == 401:
-            st.error("Unauthorized: Invalid GitHub token or insufficient permissions.")
+            st.error("Unauthorized: Invalid GitHub token or insufficient permissions. Please check token permissions.")
             return [], None
         else:
             st.error(f"Failed to load messages. Status code: {response.status_code}")
@@ -60,7 +61,7 @@ def save_message(message, sha):
         if response.status_code == 200:
             return True
         elif response.status_code == 401:
-            st.error("Unauthorized: Invalid GitHub token or insufficient permissions.")
+            st.error("Unauthorized: Invalid GitHub token or insufficient permissions. Check token and repository permissions.")
             return False
         else:
             st.error(f"Failed to save message to GitHub. Status code: {response.status_code}")
